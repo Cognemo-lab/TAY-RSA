@@ -17,6 +17,9 @@ def write_outputs(
     nonlinear_features: pd.DataFrame | None = None,
     mse_curve: pd.DataFrame | None = None,
     plot_html: Path | None = None,
+    raw_peaks: pd.DataFrame | None = None,
+    raw_ibi: pd.DataFrame | None = None,
+    subject_features: pd.DataFrame | None = None,
 ) -> dict[str, Path]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -41,10 +44,19 @@ def write_outputs(
         mse_curve.to_csv(paths["mse_csv"], index=False)
     if plot_html is not None:
         paths["plots_html"] = Path(plot_html)
+    if raw_peaks is not None:
+        paths["raw_peaks_csv"] = out_dir / "raw_detected_peaks.csv"
+        raw_peaks.to_csv(paths["raw_peaks_csv"], index=False)
+    if raw_ibi is not None:
+        paths["raw_ibi_csv"] = out_dir / "raw_detected_ibi.csv"
+        raw_ibi.to_csv(paths["raw_ibi_csv"], index=False)
+    if subject_features is not None:
+        paths["subject_features_csv"] = out_dir / "rsa_subject_features.csv"
+        subject_features.to_csv(paths["subject_features_csv"], index=False)
     if metadata is not None:
         paths["metadata_json"] = out_dir / "mwi_metadata.json"
         paths["metadata_json"].write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-    _write_summary(paths["summary_txt"], computed_metrics, qc, settings, mindware_power_stats, nonlinear_features, mse_curve, plot_html)
+    _write_summary(paths["summary_txt"], computed_metrics, qc, settings, mindware_power_stats, nonlinear_features, mse_curve, plot_html, subject_features)
     return paths
 
 
@@ -57,6 +69,7 @@ def _write_summary(
     nonlinear_features: pd.DataFrame | None,
     mse_curve: pd.DataFrame | None,
     plot_html: Path | None,
+    subject_features: pd.DataFrame | None,
 ) -> None:
     merged = metrics.merge(qc, on="segment", how="left")
     passed = merged[merged["qc_pass"].fillna(False)]
@@ -93,4 +106,6 @@ def _write_summary(
     if plot_html is not None:
         lines.append("")
         lines.append(f"Feature plots: {plot_html}")
+    if subject_features is not None:
+        lines.append("Subject/session features: rsa_subject_features.csv")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
