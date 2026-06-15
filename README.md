@@ -32,7 +32,7 @@ The HRV Analysis workbook is required for the MindWare-processed pathway. The ra
 Clone the repository:
 
 ```bash
-git clone git@github.com:andreeadiaconescu/TAY-RSA.git
+git clone git@github.com:Cognemo-lab/TAY-RSA.git
 cd TAY-RSA
 ```
 
