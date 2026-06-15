@@ -1,31 +1,36 @@
 # RSA Physiology Toolbox
 
-This repository contains a Python toolbox for extracting and quality-checking Respiratory Sinus Arrhythmia (RSA) and HRV features from MindWare outputs generated according to `SOP_OPS227`.
+This repository contains a Python toolbox for extracting and quality-checking Respiratory Sinus Arrhythmia (RSA) and HRV features directly from raw MindWare `.mwi/.mwx` recordings generated according to `SOP_OPS227`.
 
-The toolbox is intended for analysts who have MindWare RSA recordings, MindWare HRV Analysis Excel exports, or both.
+The main workflow is designed to reduce reliance on proprietary MindWare HRV software by decoding raw ECG recordings, detecting R peaks, deriving IBIs, computing HRV/RSA features, and exporting QC-ready analysis tables. MindWare HRV Analysis Excel workbooks can still be imported when available for validation, comparison, or backwards compatibility.
 
 ## What It Does
 
-- Finds MindWare RSA files in an input folder
-- Imports MindWare HRV Analysis Excel workbooks
+- Finds raw MindWare RSA files in an input folder
+- Decodes raw `.mwi/.mwx` recordings
+- Detects R peaks from the raw ECG channel
+- Derives segment-level IBI series
 - Reads `.mwi` acquisition metadata
 - Extracts segment-level HRV/RSA metrics
-- Applies available SOP-derived QC checks
-- Computes additional audit and nonlinear IBI features
+- Applies raw peak/IBI QC checks
+- Computes nonlinear IBI features and multiscale entropy
 - Generates CSV, JSON, text, and browser-viewable HTML plot outputs
 - Writes one-row-per-subject/session feature tables for downstream analyses
-- Routes each recording through a MindWare-processed or raw automatic pathway from one command-line entry point
+- Optionally imports MindWare HRV Analysis workbooks for comparison with manually processed outputs
 
 ## Required Inputs
 
-Each recording should include the MindWare files produced during acquisition and artifact correction:
+The raw workflow requires the files produced at acquisition:
 
 - `.mwi`: MindWare metadata/index file
 - `.mwx`: raw MindWare signal file
-- `.edh2`: MindWare edit/history file generated after artifact correction
+
+Optional comparison files:
+
+- `.edh2`: MindWare edit/history file generated after manual artifact correction
 - `*HRV Analysis*.xlsx`: MindWare HRV Analysis workbook generated with `File > Write All Segments`
 
-The HRV Analysis workbook is required for the MindWare-processed pathway. The raw pathway can run from paired `.mwi/.mwx` files without the workbook.
+The raw pathway can run from paired `.mwi/.mwx` files without the `.edh2` file or the HRV Analysis workbook.
 
 ## Installation
 
@@ -58,10 +63,12 @@ The master entry point is `rsa_toolbox.cli`. Run it from the repository root:
 python -m rsa_toolbox.cli /path/to/rsa_input_folder --out /path/to/rsa_output_folder
 ```
 
-Example:
+By default, the master script uses the raw-data workflow. The following command is equivalent to adding `--source raw`:
+
+Raw-data workflow:
 
 ```bash
-python -m rsa_toolbox.cli ./data --out ./rsa_outputs
+python -m rsa_toolbox.cli ./data --out ./rsa_outputs --source raw
 ```
 
 The input folder can contain one recording or many recordings. The pipeline searches recursively for supported files.
@@ -70,11 +77,21 @@ The input folder can contain one recording or many recordings. The pipeline sear
 
 The master script can funnel each recording through one of three processing modes with `--source`.
 
+### `--source raw`
+
+Recommended and default workflow when the goal is to analyze data without relying on proprietary MindWare HRV software.
+
+This mode uses paired `.mwi/.mwx` files, decodes the raw ECG channel, detects R peaks, creates IBIs, computes HRV/nonlinear/MSE features, and writes raw detection QC files.
+
+```bash
+python -m rsa_toolbox.cli ./data --out ./rsa_outputs --source raw
+```
+
 ### `--source auto`
 
-Recommended default.
+Convenience workflow for mixed folders.
 
-Uses the MindWare HRV Analysis workbook when one is present. If no workbook is found, it falls back to automatic raw ECG processing from paired `.mwi/.mwx` files.
+Uses raw automatic processing when only `.mwi/.mwx` files are present. If a MindWare HRV Analysis workbook is also present, the current implementation uses the workbook path for that recording so previously processed datasets can still be reproduced.
 
 ```bash
 python -m rsa_toolbox.cli ./data --out ./rsa_outputs --source auto
@@ -82,7 +99,7 @@ python -m rsa_toolbox.cli ./data --out ./rsa_outputs --source auto
 
 ### `--source mindware`
 
-Uses only MindWare-processed HRV Analysis workbooks. This is the recommended mode for primary SOP-derived RSA/HRV analyses.
+Uses only MindWare-processed HRV Analysis workbooks. This mode is useful for validation, comparison to historical analyses, or reproducing manually processed outputs.
 
 Recordings without an HRV Analysis workbook are skipped.
 
@@ -90,15 +107,7 @@ Recordings without an HRV Analysis workbook are skipped.
 python -m rsa_toolbox.cli ./data --out ./rsa_outputs --source mindware
 ```
 
-### `--source raw`
-
-Uses only automatic raw processing from paired `.mwi/.mwx` files. This mode decodes the raw ECG channel, detects R peaks, creates IBIs, computes HRV/nonlinear/MSE features, and writes raw detection QC files.
-
-This mode is useful when MindWare workbook exports are unavailable or when comparing automatic detection to MindWare-edited outputs. It should be validated against manually corrected MindWare outputs before replacing SOP-derived analyses.
-
-```bash
-python -m rsa_toolbox.cli ./data --out ./rsa_outputs --source raw
-```
+When validating the raw pipeline, run both `--source raw` and `--source mindware` on the same recordings and compare `rsa_subject_features.csv`, `rsa_segment_metrics.csv`, and the peak/IBI counts.
 
 ## File Pairing
 
@@ -106,8 +115,8 @@ The toolbox searches for:
 
 - `.mwi`
 - `.mwx`
-- `.edh2`
-- `.xlsx` files containing `HRV Analysis` in the filename
+- optional `.edh2`
+- optional `.xlsx` files containing `HRV Analysis` in the filename
 
 Files are paired by recording stem. The pairing logic tolerates small naming differences between raw files and MindWare workbook exports, such as an extra visit/run token in the raw filename.
 
@@ -127,32 +136,31 @@ A combined subject/session feature table is also written to:
 
 Output availability depends on the processing mode:
 
-| Output | `mindware` | `raw` | Notes |
+| Output | `raw` | `mindware` | Notes |
 |---|---:|---:|---|
 | `rsa_summary.txt` | yes | yes | Text summary |
 | `rsa_subject_features.csv` | yes | yes | One row per recording |
 | `rsa_all_subject_features.csv` | yes | yes | One row per processed recording |
-| `rsa_segment_metrics.csv` | yes | yes | Computed from workbook IBI or raw-detected IBI |
-| `rsa_segment_qc.csv` | yes | yes | Workbook editing QC or raw detection QC |
+| `rsa_segment_metrics.csv` | yes | yes | Computed from raw-detected IBI or workbook IBI |
+| `rsa_segment_qc.csv` | yes | yes | Raw detection QC or workbook editing QC |
 | `rsa_nonlinear_features.csv` | yes | yes | Segment nonlinear features |
 | `rsa_multiscale_entropy.csv` | yes | yes | Full-recording MSE |
-| `mwi_metadata.json` | yes, if `.mwi` exists | yes | Raw metadata |
+| `mwi_metadata.json` | yes | yes, if `.mwi` exists | Raw metadata |
 | `plots/feature_plots.html` | yes | yes | Browser-viewable plots |
-| `mindware_hrv_stats_long.csv` | yes | no | Imported MindWare HRV Stats |
-| `mindware_power_band_stats_long.csv` | yes | no | Imported MindWare Power Band Stats |
-| `raw_detected_peaks.csv` | no | yes | Automatic R peaks |
-| `raw_detected_ibi.csv` | no | yes | Raw-derived IBI values |
+| `raw_detected_peaks.csv` | yes | no | Automatic R peaks |
+| `raw_detected_ibi.csv` | yes | no | Raw-derived IBI values |
+| `mindware_hrv_stats_long.csv` | no | yes | Imported MindWare HRV Stats |
+| `mindware_power_band_stats_long.csv` | no | yes | Imported MindWare Power Band Stats |
 
 ### `rsa_summary.txt`
 
 Text summary of the run, including:
 
 - source file information
-- MindWare workbook metadata
+- raw acquisition metadata
 - number of analyzed segments
 - number of pass-QC segments
-- mean MindWare HF/RSA power
-- mean recomputed HF/RSA power
+- mean HF/RSA power
 - mean RMSSD
 - mean sample entropy
 - full-recording multiscale entropy area under the curve
@@ -171,11 +179,11 @@ This file aggregates pass-QC segments into fixed features, including:
 - segment counts and percent passing QC
 - subject/session QC pass flag
 - mean/median/min/max computed HRV metrics
-- mean/median/min/max MindWare HRV/RSA metrics when available
 - mean/median/min/max nonlinear features
 - multiscale entropy values by scale
 - multiscale entropy summary values
 - raw peak counts when raw mode is used
+- mean/median/min/max MindWare HRV/RSA metrics when workbook comparison files are available
 
 In `auto` mode, the `source` column records which pathway was used for each recording.
 
@@ -187,7 +195,7 @@ Use this file for merging RSA features with clinical, behavioral, or demographic
 
 ### `mindware_hrv_stats_long.csv`
 
-Long-format import of MindWare's HRV Stats sheet. These are primary SOP-derived HRV outputs.
+Long-format import of MindWare's HRV Stats sheet. This file is generated only in `--source mindware` mode and is mainly intended for validation or historical comparison.
 
 Common metrics include:
 
@@ -204,7 +212,7 @@ Common metrics include:
 
 ### `mindware_power_band_stats_long.csv`
 
-Long-format import of MindWare's Power Band Stats sheet. These are primary SOP-derived frequency-domain outputs.
+Long-format import of MindWare's Power Band Stats sheet. This file is generated only in `--source mindware` mode and is mainly intended for validation or historical comparison.
 
 Common metrics include:
 
@@ -216,7 +224,7 @@ Common metrics include:
 
 ### `rsa_segment_metrics.csv`
 
-Transparent recomputation from the IBI series used by the selected pathway.
+HRV/RSA metrics computed from the IBI series used by the selected pathway.
 
 Metrics include:
 
@@ -230,9 +238,9 @@ Metrics include:
 - `lf_hf_ratio`
 - `hf_peak_hz`
 
-In `mindware` mode, this file is computed from the IBI sheet exported by MindWare. In `raw` mode, it is computed from automatically detected R peaks in the raw ECG trace.
+In `raw` mode, this file is computed from automatically detected R peaks in the raw ECG trace. In `mindware` mode, it is computed from the IBI sheet exported by MindWare.
 
-Use this file for audit and exploratory analysis. It is not intended to be an exact clone of MindWare's proprietary calculations.
+Use the raw-mode version as the main open pipeline output. Use the MindWare-mode version for comparison to manually processed exports.
 
 ### `rsa_segment_qc.csv`
 
@@ -245,15 +253,11 @@ Columns include:
 - `qc_pass`
 - `qc_reason`
 
-Implemented SOP rule:
-
-- fail segment if more than 10% of the segment was edited
-
-In `mindware` mode, QC is based on available exported editing statistics. In `raw` mode, workbook editing percentages are not available, so QC is based on raw peak count and implausible IBI percentage.
+In `raw` mode, QC is based on raw peak count and implausible IBI percentage. In `mindware` mode, QC is based on available exported editing statistics, including the SOP rule to fail segments with more than 10% edited data.
 
 ### `raw_detected_peaks.csv`
 
-Generated only when raw automatic peak detection is used.
+Generated only when raw automatic peak detection is used. This file is central for reviewing the raw pipeline.
 
 Columns include:
 
@@ -265,7 +269,7 @@ Columns include:
 
 ### `raw_detected_ibi.csv`
 
-Generated only when raw automatic peak detection is used.
+Generated only when raw automatic peak detection is used. This file is the raw-derived IBI series used for HRV/RSA and nonlinear feature extraction.
 
 Columns include:
 
@@ -285,7 +289,7 @@ Additional segment-level nonlinear IBI features:
 
 Segment-level entropy should be interpreted cautiously because 30-second windows contain a limited number of IBIs.
 
-This file is generated in both `mindware` and `raw` modes. The underlying IBI source differs by mode.
+This file is generated in both `raw` and `mindware` modes. The raw-mode version is computed from raw-detected IBIs.
 
 ### `rsa_multiscale_entropy.csv`
 
@@ -306,7 +310,7 @@ Entropy parameters:
 
 Blank entropy values can occur when too few valid template matches are available at a scale.
 
-This file is generated in both `mindware` and `raw` modes. The underlying IBI source differs by mode.
+This file is generated in both `raw` and `mindware` modes. The raw-mode version is computed from raw-detected IBIs.
 
 ### `mwi_metadata.json`
 
@@ -330,7 +334,7 @@ The report includes:
 - mean HR by segment
 - RMSSD by segment
 - recomputed HF/RSA power by segment
-- MindWare HF/RSA power by segment
+- MindWare HF/RSA power by segment when workbook comparison files are used
 - sample entropy by segment
 - full-recording multiscale entropy curve
 
@@ -350,33 +354,31 @@ Recommended QC checks:
 
 - Confirm expected segments are present.
 - Confirm all or most segments pass QC.
-- Review `max_percent_edited`.
-- Review `% Normal Peaks` in the MindWare editing statistics.
+- Review `raw_detected_peaks.csv`, `raw_detected_ibi.csv`, and raw peak counts.
 - Inspect unusually high LF/HF ratio segments.
 - Inspect missing entropy values at larger MSE scales.
 - Open `feature_plots.html` and look for abrupt segment outliers.
-- In raw mode, review `raw_detected_peaks.csv`, `raw_detected_ibi.csv`, and raw peak counts before using the outputs analytically.
+- When using workbook comparison mode, also review `max_percent_edited` and `% Normal Peaks` from the MindWare editing statistics.
 
 The SOP also states that a segment should not be used if there are more than 3 consecutive midbeats. This rule cannot currently be fully automated from the HRV Analysis workbook alone because detailed consecutive-midbeat events are not exposed in the workbook.
 
 ## Analysis Recommendations
 
-For primary study analyses:
+For analyses using the open raw pipeline:
 
-1. Use `mindware_hrv_stats_long.csv` and `mindware_power_band_stats_long.csv` as the source of SOP-derived HRV/RSA metrics.
+1. Run `--source raw` to compute all features directly from `.mwi/.mwx` recordings.
 2. Restrict analyses to pass-QC segments from `rsa_segment_qc.csv`.
-3. Aggregate valid segments to subject/session-level features when needed.
+3. Review `raw_detected_peaks.csv`, `raw_detected_ibi.csv`, and `feature_plots.html` for peak-detection quality.
 4. Use `rsa_subject_features.csv` or `rsa_all_subject_features.csv` for downstream subject/session-level analyses.
-5. Treat recomputed, raw-derived, and nonlinear features as exploratory or secondary features unless separately validated.
+5. If MindWare workbook exports are available, run `--source mindware` separately to validate raw-derived features against manually processed outputs.
 
 Common subject/session-level features include:
 
-- mean MindWare `HF/RSA Power` across pass-QC segments
-- mean MindWare `RSA` across pass-QC segments
-- mean `RMSSD`
-- mean `SDNN`
-- mean `Mean Heart Rate`
-- mean `LF/HF Ratio`
+- mean raw-derived HF/RSA power across pass-QC segments
+- mean raw-derived RMSSD
+- mean raw-derived SDNN
+- mean raw-derived heart rate
+- mean raw-derived LF/HF ratio
 - valid segment count
 - percent segments passing QC
 - mean segment sample entropy
@@ -384,29 +386,29 @@ Common subject/session-level features include:
 
 ## Validation Notes
 
-The canonical SOP-derived HRV/RSA metrics are the values imported from the MindWare HRV Analysis Excel workbook.
+The raw automatic path decodes the observed MindWare Mobile `.mwi/.mwx` packet format and detects R peaks from the ECG channel using an automatic detector. This is the intended non-proprietary analysis path.
 
-The toolbox also recomputes some metrics from the exported IBI series. These recomputed metrics are useful for reproducibility checks, exploratory analyses, and QC, but they should not be treated as exact replacements for MindWare's proprietary HRV/RSA calculations. MindWare may use proprietary handling of edited beats, interpolation, detrending, windowing, and spectral integration.
+MindWare HRV Analysis Excel imports are retained as an optional validation pathway. They can help compare raw-derived results against manually corrected historical outputs, but they are not required to run the raw pipeline.
 
-The raw automatic path decodes the observed MindWare Mobile `.mwi/.mwx` packet format and detects R peaks from the ECG channel using a simple automatic detector. This path is intended to reduce reliance on manual workbook exports, but it should be validated against MindWare-edited outputs before being used as the primary analysis source.
+Before using raw-mode outputs as primary analysis variables in a study, validate the detector on a representative sample by comparing raw-derived peak counts, IBIs, and subject-level metrics with manually reviewed data.
 
 ## Troubleshooting
 
 ### No recordings found
 
-Check that the input folder contains supported MindWare files or HRV Analysis workbooks.
+Check that the input folder contains paired `.mwi/.mwx` files for raw mode, or HRV Analysis workbooks for MindWare comparison mode.
 
 ### Recording skipped
 
-The recording likely does not have a MindWare HRV Analysis workbook. Run MindWare artifact correction and `Write All Segments` first.
+In raw mode, the recording likely does not have paired `.mwi/.mwx` files. In MindWare mode, the recording likely does not have an HRV Analysis workbook.
 
 ### Entropy values are blank
 
 Blank entropy values usually mean the segment or coarse-grained series had too few valid template matches. This is common for short 30-second segments.
 
-### Recomputed metrics do not match MindWare
+### Raw metrics do not match MindWare workbook metrics
 
-This is expected. Treat recomputed metrics as audit or exploratory features, not primary SOP-derived values.
+Some differences are expected because the raw pathway uses automatic R-peak detection, while MindWare workbook outputs may reflect manual edits and proprietary processing choices. Use side-by-side comparisons to tune and validate the raw workflow.
 
 ## Current Limitations
 

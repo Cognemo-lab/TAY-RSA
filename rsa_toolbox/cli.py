@@ -22,8 +22,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--source",
         choices=("auto", "mindware", "raw"),
-        default="auto",
-        help="Use MindWare workbook outputs, raw automatic peak detection, or auto fallback.",
+        default="raw",
+        help="Use raw automatic peak detection, MindWare workbook outputs, or auto fallback.",
     )
     args = parser.parse_args(argv)
 
