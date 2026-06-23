@@ -31,7 +31,7 @@ def read_mwi_metadata(path: str | Path) -> dict[str, Any]:
     """
 
     path = Path(path)
-    con = sqlite3.connect(path)
+    con = sqlite3.connect(f"file:{path.resolve()}?immutable=1", uri=True)
     con.row_factory = sqlite3.Row
     try:
         info = _one(con, "select * from file_information")

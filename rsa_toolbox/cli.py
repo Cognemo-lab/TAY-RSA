@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .bids import write_bids_dataset_description, write_bids_derivatives, write_bids_participants
 from .config import RSAConfig
 from .dataset import discover_recordings
 from .excel import read_mindware_hrv_workbook
@@ -10,7 +11,7 @@ from .hrv import analyze_ibi_segments, analyze_multiscale_entropy, analyze_nonli
 from .mindware import read_mwi_metadata
 from .plots import write_feature_plots
 from .qc import apply_sop_qc
-from .raw import detect_r_peaks_from_raw, peaks_to_ibi, raw_peak_qc, read_mindware_raw_signal
+from .raw import correct_ibi_artifacts, detect_r_peaks_from_raw, peaks_to_ibi, raw_peak_qc, read_mindware_raw_signal
 from .report import write_outputs
 from .subject import build_subject_features, write_cohort_subject_features
 
@@ -19,6 +20,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run SOP_OPS227 RSA analysis from MindWare outputs or raw files.")
     parser.add_argument("root", type=Path, help="Folder containing .mwi/.mwx and HRV Analysis .xlsx files.")
     parser.add_argument("--out", type=Path, default=Path("rsa_outputs"), help="Output directory.")
+    parser.add_argument(
+        "--bids",
+        action="store_true",
+        help="Also write BIDS-derivative style outputs under <out>/derivatives/rsa-toolbox.",
+    )
+    parser.add_argument(
+        "--bids-out",
+        type=Path,
+        default=None,
+        help="Directory for BIDS-derivative style outputs. Implies --bids.",
+    )
+    parser.add_argument(
+        "--bids-task",
+        default="rest",
+        help="BIDS task label to use in derivative filenames.",
+    )
     parser.add_argument(
         "--source",
         choices=("auto", "mindware", "raw"),
@@ -32,6 +49,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"No RSA recordings found under {args.root}")
 
     config = RSAConfig()
+    bids_root = args.bids_out
+    if bids_root is None and args.bids:
+        bids_root = args.out / "derivatives" / "rsa-toolbox"
+    if bids_root is not None:
+        write_bids_dataset_description(bids_root, args.root)
+
     subject_feature_rows = []
     for rec in recordings:
         use_raw = args.source == "raw" or (args.source == "auto" and rec.hrv_xlsx is None)
@@ -51,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             raw_signal = read_mindware_raw_signal(rec.mwi, rec.mwx, config)
             raw_peaks = detect_r_peaks_from_raw(raw_signal, config)
-            raw_ibi = peaks_to_ibi(raw_peaks, config)
+            raw_ibi = correct_ibi_artifacts(peaks_to_ibi(raw_peaks, config), config)
             analysis_ibi = raw_ibi
             qc = raw_peak_qc(raw_peaks, raw_ibi, config)
         else:
@@ -65,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
             mindware_power_stats = workbook["power_band_stats"]
             settings = workbook["settings"]
 
+        if analysis_ibi.empty:
+            print(f"Skipping {rec.stem}: no IBI values were available for analysis.")
+            continue
         metrics = analyze_ibi_segments(analysis_ibi, config)
         nonlinear = analyze_nonlinear_features(analysis_ibi, config)
         mse = analyze_multiscale_entropy(analysis_ibi, config)
@@ -101,10 +127,31 @@ def main(argv: list[str] | None = None) -> int:
             raw_ibi,
             subject_features,
         )
+        if bids_root is not None:
+            bids_paths = write_bids_derivatives(
+                bids_root,
+                rec.stem,
+                source_label,
+                metrics,
+                qc,
+                nonlinear,
+                mse,
+                subject_features,
+                config,
+                metadata,
+                raw_peaks,
+                raw_ibi,
+                args.bids_task,
+            )
+            print(f"Wrote BIDS derivatives for {rec.stem}: {bids_paths['summary_features'].parent}")
         print(f"Wrote {rec.stem}: {paths['summary_txt']}")
     cohort_path = write_cohort_subject_features(args.out, subject_feature_rows)
     if cohort_path is not None:
         print(f"Wrote cohort subject features: {cohort_path}")
+    if bids_root is not None:
+        participants_path = write_bids_participants(bids_root, subject_feature_rows)
+        if participants_path is not None:
+            print(f"Wrote BIDS participants: {participants_path}")
     return 0
 
 

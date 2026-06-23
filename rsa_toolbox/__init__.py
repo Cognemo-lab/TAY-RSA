@@ -6,6 +6,7 @@ from .mindware import read_mwi_metadata
 from .excel import read_mindware_hrv_workbook
 from .hrv import analyze_ibi_segments
 from .qc import apply_sop_qc
+from .bids import write_bids_derivatives
 
 __all__ = [
     "RSAConfig",
@@ -14,4 +15,5 @@ __all__ = [
     "read_mindware_hrv_workbook",
     "analyze_ibi_segments",
     "apply_sop_qc",
+    "write_bids_derivatives",
 ]

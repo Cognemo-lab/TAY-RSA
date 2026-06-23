@@ -29,6 +29,8 @@ def _base_stem(path: Path) -> str:
 
 def _recording_key(path: Path) -> str:
     stem = _base_stem(path)
+    if re.match(r"^TAY\d+_CMH_\d+_\d+_SE\d+_RSA$", stem):
+        return stem
     stem = re.sub(r"_\d+(?=_SE\d+_RSA$)", "", stem)
     return stem
 
