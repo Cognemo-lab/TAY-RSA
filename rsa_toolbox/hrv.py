@@ -19,8 +19,25 @@ def analyze_ibi_segments(ibi: pd.DataFrame, config: RSAConfig | None = None) -> 
         metrics = _analyze_segment(values, config)
         metrics["segment"] = int(segment)
         rows.append(metrics)
-    cols = ["segment", "n_ibi", "mean_ibi_ms", "mean_hr_bpm", "sdnn_ms", "rmssd_ms",
-            "lf_power", "hf_rsa_power", "lf_hf_ratio", "hf_peak_hz"]
+    cols = [
+        "segment",
+        "n_ibi",
+        "mean_ibi_ms",
+        "mean_hr_bpm",
+        "sdnn_ms",
+        "rmssd_ms",
+        "lf_power",
+        "hf_rsa_power",
+        "lf_hf_ratio",
+        "hf_peak_hz",
+        "lf_power_uncalibrated",
+        "hf_rsa_power_uncalibrated",
+        "spectral_power_scale",
+        "spectral_window",
+        "spectral_detrend",
+        "spectral_interpolate_band_edges",
+        "spectral_time_mode",
+    ]
     return pd.DataFrame(rows)[cols]
 
 
@@ -86,6 +103,13 @@ def _analyze_segment(ibi_ms: np.ndarray, config: RSAConfig) -> dict[str, float]:
         "hf_rsa_power": math.nan,
         "lf_hf_ratio": math.nan,
         "hf_peak_hz": math.nan,
+        "lf_power_uncalibrated": math.nan,
+        "hf_rsa_power_uncalibrated": math.nan,
+        "spectral_power_scale": config.spectral_power_scale,
+        "spectral_window": config.spectral_window,
+        "spectral_detrend": config.spectral_detrend,
+        "spectral_interpolate_band_edges": config.spectral_interpolate_band_edges,
+        "spectral_time_mode": config.spectral_time_mode,
     }
     powers = _band_powers(ibi_ms, config)
     out.update(powers)
@@ -166,6 +190,13 @@ def _empty_metrics() -> dict[str, float]:
         "hf_rsa_power": math.nan,
         "lf_hf_ratio": math.nan,
         "hf_peak_hz": math.nan,
+        "lf_power_uncalibrated": math.nan,
+        "hf_rsa_power_uncalibrated": math.nan,
+        "spectral_power_scale": math.nan,
+        "spectral_window": "",
+        "spectral_detrend": "",
+        "spectral_interpolate_band_edges": False,
+        "spectral_time_mode": "",
     }
 
 
@@ -173,8 +204,7 @@ def _band_powers(ibi_ms: np.ndarray, config: RSAConfig) -> dict[str, float]:
     if ibi_ms.size < 4:
         return {}
 
-    beat_times = np.cumsum(ibi_ms) / 1000.0
-    beat_times = beat_times - beat_times[0]
+    beat_times = _ibi_sample_times(ibi_ms, config.spectral_time_mode)
     duration = beat_times[-1]
     if duration <= 2.0 / config.hf_rsa_band_hz[0]:
         return {}
@@ -184,13 +214,17 @@ def _band_powers(ibi_ms: np.ndarray, config: RSAConfig) -> dict[str, float]:
         return {}
 
     hp = np.interp(t, beat_times, ibi_ms)
-    hp = hp - np.mean(hp)
-    window = np.hanning(hp.size)
+    hp = _detrend(hp, config.spectral_detrend)
+    window = _window(hp.size, config.spectral_window)
     freqs = np.fft.rfftfreq(hp.size, d=1.0 / config.resample_hz)
     psd = (np.abs(np.fft.rfft(hp * window)) ** 2) / (config.resample_hz * np.sum(window ** 2))
+    if config.spectral_one_sided_density and psd.size > 2:
+        psd[1:-1] *= 2.0
 
-    lf = _integrate_band(freqs, psd, config.lf_band_hz)
-    hf = _integrate_band(freqs, psd, config.hf_rsa_band_hz)
+    lf_uncalibrated = _integrate_band(freqs, psd, config.lf_band_hz, config.spectral_interpolate_band_edges)
+    hf_uncalibrated = _integrate_band(freqs, psd, config.hf_rsa_band_hz, config.spectral_interpolate_band_edges)
+    lf = _scale_power(lf_uncalibrated, config.spectral_power_scale)
+    hf = _scale_power(hf_uncalibrated, config.spectral_power_scale)
     hf_mask = (freqs >= config.hf_rsa_band_hz[0]) & (freqs <= config.hf_rsa_band_hz[1])
     hf_peak = float(freqs[hf_mask][np.argmax(psd[hf_mask])]) if np.any(hf_mask) else math.nan
     return {
@@ -198,10 +232,69 @@ def _band_powers(ibi_ms: np.ndarray, config: RSAConfig) -> dict[str, float]:
         "hf_rsa_power": hf,
         "lf_hf_ratio": float(lf / hf) if hf and not math.isnan(hf) else math.nan,
         "hf_peak_hz": hf_peak,
+        "lf_power_uncalibrated": lf_uncalibrated,
+        "hf_rsa_power_uncalibrated": hf_uncalibrated,
+        "spectral_power_scale": config.spectral_power_scale,
+        "spectral_window": config.spectral_window,
+        "spectral_detrend": config.spectral_detrend,
+        "spectral_interpolate_band_edges": config.spectral_interpolate_band_edges,
+        "spectral_time_mode": config.spectral_time_mode,
     }
 
 
-def _integrate_band(freqs: np.ndarray, psd: np.ndarray, band: tuple[float, float]) -> float:
+def _scale_power(power: float, scale: float) -> float:
+    if math.isnan(power):
+        return math.nan
+    return float(power * scale)
+
+
+def _ibi_sample_times(ibi_ms: np.ndarray, mode: str) -> np.ndarray:
+    if mode == "cumsum0":
+        beat_times = np.cumsum(ibi_ms) / 1000.0
+        return beat_times - beat_times[0]
+    if mode == "prepend0":
+        return np.concatenate(([0.0], np.cumsum(ibi_ms[:-1]) / 1000.0))
+    if mode == "midpoint":
+        edges = np.concatenate(([0.0], np.cumsum(ibi_ms) / 1000.0))
+        return (edges[:-1] + edges[1:]) / 2.0
+    raise ValueError(f"Unsupported spectral_time_mode: {mode}")
+
+
+def _detrend(values: np.ndarray, mode: str) -> np.ndarray:
+    if mode == "none":
+        return values.copy()
+    if mode == "constant":
+        return values - np.mean(values)
+    if mode == "linear":
+        x = np.arange(values.size, dtype=float)
+        slope, intercept = np.polyfit(x, values, deg=1)
+        return values - ((slope * x) + intercept)
+    raise ValueError(f"Unsupported spectral_detrend: {mode}")
+
+
+def _window(n: int, name: str) -> np.ndarray:
+    if name == "boxcar":
+        return np.ones(n)
+    if name == "hann":
+        return np.hanning(n)
+    if name == "hamming":
+        return np.hamming(n)
+    if name == "blackman":
+        return np.blackman(n)
+    raise ValueError(f"Unsupported spectral_window: {name}")
+
+
+def _integrate_band(
+    freqs: np.ndarray,
+    psd: np.ndarray,
+    band: tuple[float, float],
+    interpolate_edges: bool = False,
+) -> float:
+    if interpolate_edges:
+        inside = (freqs > band[0]) & (freqs < band[1])
+        band_freqs = np.concatenate(([band[0]], freqs[inside], [band[1]]))
+        band_psd = np.interp(band_freqs, freqs, psd)
+        return float(np.trapz(band_psd, band_freqs))
     mask = (freqs >= band[0]) & (freqs <= band[1])
     if np.count_nonzero(mask) < 2:
         return math.nan

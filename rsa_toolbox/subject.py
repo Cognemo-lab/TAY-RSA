@@ -75,8 +75,20 @@ def build_subject_features(
         "hf_rsa_power",
         "lf_hf_ratio",
         "hf_peak_hz",
+        "lf_power_uncalibrated",
+        "hf_rsa_power_uncalibrated",
+        "spectral_power_scale",
     ]:
         _add_summary_stats(row, passed, col, f"computed_{col}")
+
+    for col in [
+        "spectral_window",
+        "spectral_detrend",
+        "spectral_interpolate_band_edges",
+        "spectral_time_mode",
+    ]:
+        if col in passed and not passed.empty:
+            row[f"computed_{col}"] = passed[col].iloc[0]
 
     if nonlinear_features is not None and not nonlinear_features.empty:
         nonlin = nonlinear_features.merge(qc[["segment", "qc_pass"]], on="segment", how="left")

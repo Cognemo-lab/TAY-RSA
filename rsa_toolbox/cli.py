@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
 from .bids import write_bids_dataset_description, write_bids_derivatives, write_bids_participants
@@ -14,6 +15,15 @@ from .qc import apply_sop_qc
 from .raw import correct_ibi_artifacts, detect_r_peaks_from_raw, peaks_to_ibi, raw_peak_qc, read_mindware_raw_signal
 from .report import write_outputs
 from .subject import build_subject_features, write_cohort_subject_features
+
+
+def _parse_bool(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Expected a boolean value, got {value!r}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,6 +52,57 @@ def main(argv: list[str] | None = None) -> int:
         default="raw",
         help="Use raw automatic peak detection, MindWare workbook outputs, or auto fallback.",
     )
+    parser.add_argument(
+        "--spectral-power-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Multiplicative scale applied to absolute LF and HF/RSA powers. "
+            "Use a validation-derived value when aligning automated PSD normalization "
+            "with manual MindWare exports; LF/HF ratio is unchanged. "
+            "Uncalibrated powers are still written to *_uncalibrated columns."
+        ),
+    )
+    parser.add_argument(
+        "--spectral-preset",
+        choices=("default", "mindware-harmonized"),
+        default="default",
+        help=(
+            "Frequency-domain estimator preset. 'mindware-harmonized' uses the "
+            "best validation-screened settings so far: Blackman window, linear "
+            "detrending, and interpolated band-edge integration."
+        ),
+    )
+    parser.add_argument(
+        "--spectral-window",
+        choices=("boxcar", "hann", "hamming", "blackman"),
+        default=None,
+        help="Override the spectral window used for frequency-domain HRV.",
+    )
+    parser.add_argument(
+        "--spectral-detrend",
+        choices=("none", "constant", "linear"),
+        default=None,
+        help="Override detrending before spectral estimation.",
+    )
+    parser.add_argument(
+        "--spectral-interpolate-band-edges",
+        type=_parse_bool,
+        default=None,
+        help="Whether to interpolate PSD values at LF/HF band edges before integration.",
+    )
+    parser.add_argument(
+        "--spectral-time-mode",
+        choices=("cumsum0", "prepend0", "midpoint"),
+        default=None,
+        help="How IBI sample times are assigned before interpolation/resampling.",
+    )
+    parser.add_argument(
+        "--spectral-one-sided-density",
+        type=_parse_bool,
+        default=None,
+        help="Whether to double positive-frequency PSD bins for one-sided density normalization.",
+    )
     args = parser.parse_args(argv)
 
     recordings = discover_recordings(args.root)
@@ -49,6 +110,23 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"No RSA recordings found under {args.root}")
 
     config = RSAConfig()
+    if args.spectral_preset == "mindware-harmonized":
+        config = replace(
+            config,
+            spectral_window="blackman",
+            spectral_detrend="linear",
+            spectral_interpolate_band_edges=True,
+            spectral_time_mode="cumsum0",
+        )
+    overrides = {
+        "spectral_power_scale": args.spectral_power_scale,
+        "spectral_window": args.spectral_window,
+        "spectral_detrend": args.spectral_detrend,
+        "spectral_interpolate_band_edges": args.spectral_interpolate_band_edges,
+        "spectral_time_mode": args.spectral_time_mode,
+        "spectral_one_sided_density": args.spectral_one_sided_density,
+    }
+    config = replace(config, **{key: value for key, value in overrides.items() if value is not None})
     bids_root = args.bids_out
     if bids_root is None and args.bids:
         bids_root = args.out / "derivatives" / "rsa-toolbox"

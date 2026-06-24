@@ -22,6 +22,12 @@ class RSAConfig:
     resample_hz: float = 4.0
     lf_band_hz: tuple[float, float] = (0.04, 0.12)
     hf_rsa_band_hz: tuple[float, float] = (0.12, 0.40)
+    spectral_window: str = "hann"
+    spectral_detrend: str = "constant"
+    spectral_interpolate_band_edges: bool = False
+    spectral_time_mode: str = "cumsum0"
+    spectral_one_sided_density: bool = False
+    spectral_power_scale: float = 1.0
     entropy_m: int = 2
     entropy_r_ratio: float = 0.20
     mse_max_scale: int = 10

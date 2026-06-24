@@ -276,6 +276,12 @@ def _sidecar(
             "ExpectedSegments": config.expected_segments,
             "LFBandHz": list(config.lf_band_hz),
             "HFRSABandHz": list(config.hf_rsa_band_hz),
+            "SpectralWindow": config.spectral_window,
+            "SpectralDetrend": config.spectral_detrend,
+            "SpectralInterpolateBandEdges": config.spectral_interpolate_band_edges,
+            "SpectralTimeMode": config.spectral_time_mode,
+            "SpectralOneSidedDensity": config.spectral_one_sided_density,
+            "SpectralPowerScale": config.spectral_power_scale,
         },
         "Columns": columns,
     }

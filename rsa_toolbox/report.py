@@ -89,6 +89,15 @@ def _write_summary(
             if not hf.empty:
                 lines.append(f"Mean MindWare HF/RSA power across passing segments: {hf['value'].mean():.6g}")
         lines.append(f"Mean recomputed HF/RSA power across passing segments: {passed['hf_rsa_power'].mean():.6g}")
+        if "spectral_power_scale" in passed:
+            scale = pd.to_numeric(passed["spectral_power_scale"], errors="coerce").dropna()
+            if not scale.empty and float(scale.iloc[0]) != 1.0:
+                lines.append(f"Spectral power scale applied to LF/HF absolute powers: {float(scale.iloc[0]):.6g}")
+                if "hf_rsa_power_uncalibrated" in passed:
+                    lines.append(
+                        "Mean uncalibrated HF/RSA power across passing segments: "
+                        f"{passed['hf_rsa_power_uncalibrated'].mean():.6g}"
+                    )
         lines.append(f"Mean RMSSD across passing segments: {passed['rmssd_ms'].mean():.6g} ms")
         if nonlinear_features is not None and not nonlinear_features.empty:
             entropy = pd.to_numeric(nonlinear_features["sample_entropy_m2_r02"], errors="coerce")

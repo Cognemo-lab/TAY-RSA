@@ -251,12 +251,18 @@ Segment-level HRV/RSA metrics:
 - `hf_rsa_power`
 - `lf_hf_ratio`
 - `hf_peak_hz`
+- `lf_power_uncalibrated`
+- `hf_rsa_power_uncalibrated`
+- `spectral_power_scale`
 
 Recommended interpretation:
 
 - `mean_hr_bpm` and `mean_ibi_ms` are generally the most stable automated outputs.
 - `sdnn_ms` and `rmssd_ms` are sensitive to missed/extra beats, but improved artifact correction makes them much more reliable.
-- `hf_rsa_power` and `lf_hf_ratio` are most sensitive to spectral assumptions and should be interpreted with QC plots and validation results.
+- Absolute `lf_power` and `hf_rsa_power` are most sensitive to PSD normalization, interpolation, windowing, and band-integration choices. When aligning the automated pipeline to a validated manual/MindWare reference, use `--spectral-power-scale` to apply a validation-derived multiplicative scale to LF and HF/RSA powers.
+- `lf_power_uncalibrated` and `hf_rsa_power_uncalibrated` preserve the original toolbox PSD estimates for auditability.
+- `lf_hf_ratio` is unchanged by multiplicative spectral scaling and is often more robust across PSD normalization conventions.
+- If the goal is to harmonize the automated spectral estimator with MindWare-style outputs, use `--spectral-preset mindware-harmonized`. This preset uses Blackman windowing, linear detrending, and interpolated LF/HF band-edge integration. These settings improve spectral agreement by changing the shape of the PSD estimate rather than applying only a fixed calibration constant.
 
 ### `rsa_nonlinear_features.csv`
 
@@ -475,6 +481,12 @@ python -m rsa_toolbox.cli ./data/Raw --out ./rsa_outputs/raw --source raw
 
 # Raw workflow plus BIDS-style derivatives
 python -m rsa_toolbox.cli ./data/Raw --out ./rsa_outputs/raw --source raw --bids
+
+# Raw workflow with validation-derived absolute spectral-power scaling
+python -m rsa_toolbox.cli ./data/Raw --out ./rsa_outputs/raw_scaled --source raw --spectral-power-scale 7.140679
+
+# Raw workflow with MindWare-harmonized spectral estimator
+python -m rsa_toolbox.cli ./data/Raw --out ./rsa_outputs/raw_harmonized --source raw --spectral-preset mindware-harmonized
 
 # Manual MindWare workbook workflow
 python -m rsa_toolbox.cli ./data/Analysis --out ./rsa_outputs/mindware --source mindware
