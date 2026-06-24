@@ -40,6 +40,12 @@ Add BIDS-derivative style outputs:
 python -m rsa_toolbox.cli /path/to/data --out /path/to/rsa_outputs --source raw --bids
 ```
 
+Or use the master runner for a full dataset:
+
+```bash
+python run_rsa_pipeline.py /path/to/data --out /path/to/rsa_outputs --mode raw --bids
+```
+
 ## Input Data
 
 For the raw workflow, each recording needs:
@@ -69,6 +75,58 @@ data/
 ## Processing Modes
 
 The `--source` option controls how recordings are processed.
+
+## Master Runner
+
+For routine use across a full dataset, use `run_rsa_pipeline.py`. It wraps the toolbox CLI, searches recursively through all subjects, and writes a `run_manifest.txt` with the exact settings used.
+
+Recommended raw-data run:
+
+```bash
+python run_rsa_pipeline.py ./data --out ./rsa_outputs/run_001 --mode raw --bids
+```
+
+If the dataset has both raw files and manual MindWare exports:
+
+```bash
+python run_rsa_pipeline.py ./data --out ./rsa_outputs/run_001 --mode both --bids
+```
+
+Use the MindWare-harmonized spectral estimator:
+
+```bash
+python run_rsa_pipeline.py ./data \
+  --out ./rsa_outputs/run_harmonized \
+  --mode raw \
+  --bids \
+  --spectral-preset mindware-harmonized
+```
+
+Expected input layout:
+
+```text
+data/
+  Raw/
+    <subject>/<visit>/<recording>.mwi
+    <subject>/<visit>/<recording>.mwx
+  Analysis/
+    <subject>/<visit>/<recording>_HRV Analysis*.xlsx
+```
+
+Outputs:
+
+```text
+<out>/
+  run_manifest.txt
+  raw/
+    rsa_all_subject_features.csv
+    <recording_id>/
+  manual/
+    rsa_all_subject_features.csv
+    <recording_id>/
+```
+
+The `manual/` folder is created only when `--mode manual` or `--mode both` is used.
 
 ### `--source raw`
 
