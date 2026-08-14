@@ -147,6 +147,7 @@ def build_subject_features(
 
 
 def _subject_id_from_recording(recording_id: str) -> str:
+    recording_id = re.sub(r"__dup\d+$", "", recording_id)
     match = re.match(r"(.+?)(?:_\d+)?_SE\d+_RSA$", recording_id)
     if match:
         return match.group(1)

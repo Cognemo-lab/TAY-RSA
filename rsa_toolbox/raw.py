@@ -61,6 +61,9 @@ def read_mindware_raw_signal(
     finally:
         con.close()
 
+    if not rows:
+        raise ValueError(f"No raw data packets were found for ECG channel group in {mwi_path.name}.")
+
     channel_count = int(group["channel_count"])
     sample_width = _sample_width_bytes(int(group["data_type"]))
     labels = [str(row["label"]) for row in channels]
@@ -76,6 +79,9 @@ def read_mindware_raw_signal(
         ticks = np.arange(int(row["start_time_offset"]), int(row["end_time_offset"]) + 1)
         time_base = float(file_info["time_base"] or config.raw_sampling_hz)
         times.append(ticks / time_base)
+
+    if not arrays or not times:
+        raise ValueError(f"No raw samples could be decoded from {mwx_path.name}.")
 
     raw = np.vstack(arrays)
     time_s = np.concatenate(times)
@@ -295,7 +301,10 @@ def _decode_interleaved(payload: bytes, n_samples: int, channel_count: int, samp
             value -= full_range
         values.append(value)
     arr = np.asarray(values, dtype=float)
-    return arr[: n_samples * channel_count].reshape(n_samples, channel_count)
+    expected = n_samples * channel_count
+    if arr.size < expected:
+        raise ValueError(f"Truncated raw packet: expected {expected} values, decoded {arr.size}.")
+    return arr[:expected].reshape(n_samples, channel_count)
 
 
 def _ecg_preprocess(values: np.ndarray, sampling_hz: float) -> np.ndarray:

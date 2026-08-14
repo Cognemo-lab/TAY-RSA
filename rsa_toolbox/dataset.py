@@ -39,7 +39,7 @@ def discover_recordings(root: str | Path) -> list[RecordingSet]:
     """Find MindWare raw files and generated HRV files under ``root``."""
 
     root = Path(root).expanduser().resolve()
-    grouped: dict[str, dict[str, Path]] = {}
+    grouped: dict[str, dict[str, list[Path]]] = {}
     for path in root.rglob("*"):
         if not path.is_file():
             continue
@@ -49,21 +49,48 @@ def discover_recordings(root: str | Path) -> list[RecordingSet]:
         if suffix == ".xlsx" and "HRV Analysis" not in path.name:
             continue
         stem = _recording_key(path)
-        grouped.setdefault(stem, {})[suffix.lstrip(".")] = path
+        grouped.setdefault(stem, {}).setdefault(suffix.lstrip("."), []).append(path)
 
     out: list[RecordingSet] = []
     for stem, files in sorted(grouped.items()):
-        out.append(
-            RecordingSet(
-                stem=stem,
-                root=root,
-                mwi=files.get("mwi"),
-                mwx=files.get("mwx"),
-                edh2=files.get("edh2"),
-                hrv_xlsx=files.get("xlsx"),
+        max_count = max((len(paths) for paths in files.values()), default=0)
+        if max_count <= 1:
+            out.append(
+                RecordingSet(
+                    stem=stem,
+                    root=root,
+                    mwi=_first(files.get("mwi")),
+                    mwx=_first(files.get("mwx")),
+                    edh2=_first(files.get("edh2")),
+                    hrv_xlsx=_first(files.get("xlsx")),
+                )
             )
-        )
+            continue
+
+        contexts = sorted({path.parent for paths in files.values() for path in paths})
+        for idx, context in enumerate(contexts, start=1):
+            context_files = {
+                suffix: _first(path for path in paths if path.parent == context)
+                for suffix, paths in files.items()
+            }
+            duplicate_stem = f"{stem}__dup{idx:02d}"
+            out.append(
+                RecordingSet(
+                    stem=duplicate_stem,
+                    root=root,
+                    mwi=context_files.get("mwi"),
+                    mwx=context_files.get("mwx"),
+                    edh2=context_files.get("edh2"),
+                    hrv_xlsx=context_files.get("xlsx"),
+                )
+            )
     return out
+
+
+def _first(paths: Iterable[Path] | None) -> Path | None:
+    if paths is None:
+        return None
+    return next(iter(paths), None)
 
 
 def require_files(recording: RecordingSet, names: Iterable[str]) -> None:

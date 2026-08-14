@@ -250,6 +250,7 @@ def _write_tsv(path: Path, frame: pd.DataFrame) -> None:
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
@@ -317,6 +318,12 @@ def _ibi_onsets(ibi: pd.DataFrame, config: RSAConfig) -> pd.Series:
 
 
 def _entities_from_recording(recording_id: str, task_label: str) -> dict[str, str]:
+    duplicate = re.match(r"(.+)__dup(\d+)$", recording_id)
+    duplicate_num = None
+    if duplicate:
+        recording_id = duplicate.group(1)
+        duplicate_num = duplicate.group(2)
+
     subject = recording_id
     session = "01"
     run = "01"
@@ -324,16 +331,20 @@ def _entities_from_recording(recording_id: str, task_label: str) -> dict[str, st
     if match:
         subject, run, session_num = match.groups()
         session = f"SE{session_num}"
-    return {
+    entities = {
         "sub": _bids_label(subject),
         "ses": _bids_label(session),
         "task": _bids_label(task_label),
         "run": _bids_label(run),
     }
+    if duplicate_num is not None:
+        entities["acq"] = _bids_label(f"dup{duplicate_num}")
+    return entities
 
 
 def _entity_stem(entities: dict[str, str]) -> str:
-    return f"sub-{entities['sub']}_ses-{entities['ses']}_task-{entities['task']}_run-{entities['run']}"
+    acq = f"_acq-{entities['acq']}" if "acq" in entities else ""
+    return f"sub-{entities['sub']}_ses-{entities['ses']}_task-{entities['task']}{acq}_run-{entities['run']}"
 
 
 def _bids_label(value: object) -> str:

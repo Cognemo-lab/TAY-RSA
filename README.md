@@ -128,6 +128,14 @@ Outputs:
 
 The `manual/` folder is created only when `--mode manual` or `--mode both` is used.
 
+If an individual recording fails, the CLI continues to the next recording and writes:
+
+```text
+<out>/failed_recordings.csv
+```
+
+Use this file to review problematic or duplicate/recollected recordings. For debugging a single failing recording, add `--fail-fast` to stop immediately and show the full exception.
+
 ### `--source raw`
 
 Recommended default. Uses paired `.mwi/.mwx` files and does not require proprietary MindWare preprocessing outputs.
@@ -502,6 +510,10 @@ Check:
 - high `raw_invalid_ibi_percent`
 - high `raw_artifact_corrected_percent`
 - abrupt HR/RMSSD/HF power outliers in `feature_plots.html`
+
+### A recording fails but the cohort run continues
+
+This is expected for large cohort runs. Check `failed_recordings.csv` in the output folder. Common causes include truncated raw files, missing ECG packets, invalid `.mwi` SQLite files, or duplicate/recollected sessions with the same recording stem. Duplicate stems are disambiguated with suffixes such as `__dup01` and `__dup02`.
 
 ### Entropy values are blank
 
