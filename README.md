@@ -1,6 +1,6 @@
 # RSA Physiology Toolbox
 
-Python toolbox for extracting Respiratory Sinus Arrhythmia (RSA), HRV, QC, and nonlinear IBI features from MindWare physiology recordings.
+Python toolbox for extracting Respiratory Sinus Arrhythmia (RSA), HRV, QC, and nonlinear Inter-beat interval (IBI) features from MindWare physiology recordings.
 
 The recommended workflow starts from raw MindWare `.mwi/.mwx` files. The toolbox decodes the raw ECG signal, detects R peaks, derives and corrects IBIs, computes RSA/HRV features, generates QC reports, and optionally writes BIDS-derivative style outputs. MindWare HRV Analysis Excel files can also be imported when you need to compare against manually processed historical outputs.
 
