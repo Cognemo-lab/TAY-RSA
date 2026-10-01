@@ -9,7 +9,7 @@ The recommended workflow starts from raw MindWare `.mwi/.mwx` files. The toolbox
 Clone the repository:
 
 ```bash
-git clone git@github.com:Cognemo-lab/TAY-RSA.git
+git clone https://github.com/Cognemo-lab/TAY-RSA.git
 cd TAY-RSA
 ```
 
@@ -17,7 +17,7 @@ Create an environment and install dependencies:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate # for unix/Mac; on Windows Powershell use: .\.venv\Scripts\activate.ps1 or .\.venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 python -m pip install numpy pandas openpyxl
 ```
