@@ -4,9 +4,27 @@ Python toolbox for extracting Respiratory Sinus Arrhythmia (RSA), HRV, QC, and n
 
 The recommended workflow starts from raw MindWare `.mwi/.mwx` files. The toolbox decodes the raw ECG signal, detects R peaks, derives and corrects IBIs, computes RSA/HRV features, generates QC reports, and optionally writes BIDS-derivative style outputs. MindWare HRV Analysis Excel files can also be imported when you need to compare against manually processed historical outputs.
 
+```mermaid
+flowchart TD
+    RAW["Raw MindWare files: .mwi + .mwx"] --> S1["1. Decode and calibrate ECG"]
+    S1 --> S2["2. Detect R peaks"]
+    S2 --> S3["3. Derive IBIs and correct artifacts"]
+    S3 --> S4["4. Assess segment QC and compute RSA/HRV features"]
+    XLSX["Manual MindWare HRV Analysis workbook: .xlsx"] --> M["M. Import edited IBIs, editing statistics, and reference metrics"]
+    M --> S4
+    S4 --> S5["5. Write feature tables, QC reports, and plots"]
+    S5 -. "Optional: --bids" .-> S6["6. Write BIDS-derivative style outputs"]
+```
+
+The raw and manual pathways run separately. Step 4 uses QC appropriate to the
+selected source and computes features from its IBI series; step 5 includes
+summaries across passing segments. Compare the two runs' outputs to assess
+agreement with manual processing. The commands below run a complete pathway;
+the step numbers describe their coverage, not separate commands to execute.
+
 ## Quick Start
 
-Clone the repository:
+Set up the toolbox before running either pathway. Clone the repository:
 
 ```bash
 git clone https://github.com/Cognemo-lab/TAY-RSA.git
@@ -27,29 +45,41 @@ NumPy 2.0 or newer is required for spectral band integration with
 Python 3.14.3, NumPy 2.5.3, pandas 3.0.6, and openpyxl 3.1.5. These are tested
 versions, not exact dependency pins.
 
-Run the default raw-data workflow:
+Run the default raw-data workflow (**steps 1-5**):
 
 ```bash
 python -m rsa_toolbox.cli /path/to/data --out /path/to/rsa_outputs
 ```
 
-This is equivalent to:
+This is equivalent to explicitly selecting the raw pathway (**steps 1-5**):
 
 ```bash
 python -m rsa_toolbox.cli /path/to/data --out /path/to/rsa_outputs --source raw
 ```
 
-Add BIDS-derivative style outputs:
+Run the raw workflow and add BIDS-derivative style outputs (**steps 1-6**):
 
 ```bash
 python -m rsa_toolbox.cli /path/to/data --out /path/to/rsa_outputs --source raw --bids
 ```
 
-Or use the master runner for a full dataset (multi-subject, multiple time points):
+Or use the master runner for a full dataset with a `Raw/` subfolder
+(multi-subject, multiple time points; **steps 1-6 for each raw recording**):
 
 ```bash
 python run_rsa_pipeline.py /path/to/data --out /path/to/rsa_outputs --mode raw --bids
 ```
+
+To prepare manual reference outputs for comparison, run the workbook pathway
+in a separate output folder (**step M, then steps 4-5**):
+
+```bash
+python -m rsa_toolbox.cli /path/to/data/Analysis --out /path/to/rsa_outputs/manual --source mindware
+```
+
+This imports already edited IBIs instead of running raw ECG processing
+(steps 1-3). See [Comparing Automated Raw Outputs To Manual MindWare Outputs](#comparing-automated-raw-outputs-to-manual-mindware-outputs)
+for the metrics to compare after both runs.
 
 ## Input Data
 
