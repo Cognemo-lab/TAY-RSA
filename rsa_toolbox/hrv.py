@@ -294,8 +294,8 @@ def _integrate_band(
         inside = (freqs > band[0]) & (freqs < band[1])
         band_freqs = np.concatenate(([band[0]], freqs[inside], [band[1]]))
         band_psd = np.interp(band_freqs, freqs, psd)
-        return float(np.trapz(band_psd, band_freqs))
+        return float(np.trapezoid(band_psd, band_freqs))
     mask = (freqs >= band[0]) & (freqs <= band[1])
     if np.count_nonzero(mask) < 2:
         return math.nan
-    return float(np.trapz(psd[mask], freqs[mask]))
+    return float(np.trapezoid(psd[mask], freqs[mask]))

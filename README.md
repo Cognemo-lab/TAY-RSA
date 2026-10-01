@@ -19,8 +19,13 @@ Create an environment and install dependencies:
 python3 -m venv .venv
 source .venv/bin/activate # for unix/Mac; on Windows Powershell use: .\.venv\Scripts\activate.ps1 or .\.venv\Scripts\activate.bat
 python -m pip install --upgrade pip
-python -m pip install numpy pandas openpyxl
+python -m pip install -r requirements.txt
 ```
+
+NumPy 2.0 or newer is required for spectral band integration with
+`numpy.trapezoid`. The NumPy compatibility fix was tested on Windows with
+Python 3.14.3, NumPy 2.5.3, pandas 3.0.6, and openpyxl 3.1.5. These are tested
+versions, not exact dependency pins.
 
 Run the default raw-data workflow:
 
