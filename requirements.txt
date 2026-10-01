@@ -1,0 +1,4 @@
+# NumPy 2.0 introduced numpy.trapezoid, used for spectral band integration.
+numpy>=2.0
+pandas
+openpyxl
