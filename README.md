@@ -40,7 +40,7 @@ Add BIDS-derivative style outputs:
 python -m rsa_toolbox.cli /path/to/data --out /path/to/rsa_outputs --source raw --bids
 ```
 
-Or use the master runner for a full dataset:
+Or use the master runner for a full dataset (multi-subject, multiple time points):
 
 ```bash
 python run_rsa_pipeline.py /path/to/data --out /path/to/rsa_outputs --mode raw --bids
